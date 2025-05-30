@@ -5,7 +5,7 @@ import Redis from "ioredis";
 import dotenv from "dotenv";
 import { ProjectDetails, TranscriptData } from "./types";
 import prisma from "./prisma";
-import { gernerateShorts } from "./controllers/model.controllers";
+import { generateShorts } from "./controllers/model.controllers";
 import { getShortDurations } from "./controllers/shorts.controllers";
 import { generateAndStoreShorts } from "./controllers/video.controllers";
 dotenv.config();
@@ -64,7 +64,7 @@ const consumeQueue = async (queueName: string) => {
             throw new Error("Project not found for ID: " + projectId);
           }
 
-          const ShortContentInTranscripts = await gernerateShorts(job.text, ProjectDetails.config as unknown as ProjectDetails);
+          const ShortContentInTranscripts = await generateShorts(job.text, ProjectDetails.config as unknown as ProjectDetails);
           const ShortWithDurations = getShortDurations(ShortContentInTranscripts, job.words);
           
           // Filter out shorts that couldn't be matched

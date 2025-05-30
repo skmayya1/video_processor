@@ -17,14 +17,7 @@ export interface Word {
     confidence?: number;
     speaker?: string;
   }
-  
-  export interface Chapter {
-    start: number;
-    end: number;
-    summary: string;
-    headline?: string;
-  }
-  
+
   export interface TranscriptData {
     projectId: string;
     videoId?: string;
@@ -33,7 +26,6 @@ export interface Word {
     text: string;
     summary: string;
     words: Word[];
-    chapters: Chapter[];
   }
 
 

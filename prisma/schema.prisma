@@ -17,7 +17,9 @@ model Project {
   slug      String        @unique
   cover     String
   title     String
+  pubId     String?
   status    ProjectStatus @default(queued)
+  url       String?
   user      user          @relation(fields: [userId], references: [user_id], onDelete: Cascade)
   short     short[]
 }

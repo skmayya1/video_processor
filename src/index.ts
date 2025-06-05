@@ -42,41 +42,40 @@ const consumeQueue = async (queueName: string) => {
       if (result) {
         const [key, value] = result;
         const job: TranscriptData = JSON.parse(value);
-        console.log(job);
         
-        const { projectId } = job;
-        console.log(projectId);
-        
-
+        const { projectId } = job;        
         try {
           await updateProjectStatus(projectId, "analyzing");
-          
-          const ProjectDetails = await prisma.project.findUnique({
+          const ProjectDetails = await prisma.project.update({
             where: { id: projectId },
+            data:{
+              url:job.cloudinaryUrl as string,
+              pubId:job.pub_id
+            },
             select: {
               id: true,
               userId: true,
               config: true,
             }
           });
-
+          console.log(ProjectDetails?.config);
+          
           if (!ProjectDetails) {
             throw new Error("Project not found for ID: " + projectId);
           }
-
+          
           const ShortContentInTranscripts = await generateShorts(job.text, ProjectDetails.config as unknown as ProjectDetails);
           const ShortWithDurations = getShortDurations(ShortContentInTranscripts, job.words);
           
-          // Filter out shorts that couldn't be matched
           const shorts = ShortWithDurations.filter(
-            (short) => short.from !== undefined && short.to !== undefined && (short.to - short.from) > 15
+            (short) => short.from !== undefined && short.to !== undefined 
           );
 
           if (shorts.length === 0) {
             throw new Error("No valid shorts could be generated from the transcript");
           }
           const ShortsWithVideoUrl = await generateAndStoreShorts(shorts, ProjectDetails.config as unknown as ProjectDetails,job?.pub_id as string);
-          console.log(ShortsWithVideoUrl);
+          console.log(ShortsWithVideoUrl.map((ec)=>ec.videoUrl));
 
           await prisma.short.createMany({
             data: ShortsWithVideoUrl.map((short) => ({
@@ -85,7 +84,7 @@ const consumeQueue = async (queueName: string) => {
               title: short.title,
               highlightText: short.highlightText,
               from: short.from as number,
-              to: short.to as number,
+              to: short.to as number
             })) 
           });
             await updateProjectStatus(projectId, "completed");

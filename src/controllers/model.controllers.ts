@@ -1,73 +1,75 @@
 import { AiResponse, ProjectDetails } from "../types";
 import ai from "../gemini";
 
-const systemInstruction = `You are an expert video editor and content strategist specializing in viral short-form videos (YouTube Shorts, Reels, TikToks).
+interface Resp extends AiResponse {
+  viralPotential: string
+  estimatedDuration:number
+}
 
-Your mission is to identify the most engaging, shareable moments from long-form content and craft them into compelling short clips that maximize viewer retention and engagement.
+const systemInstruction = `You are an expert viral content strategist and short-form video editor with deep knowledge of YouTube Shorts, TikTok, and Instagram Reels algorithms.
 
-CLIP LENGTH REQUIREMENTS:
-- Each clip should be 15-60 seconds long (aim for 30-45 seconds for optimal engagement)
-- Include sufficient context: setup (5-10 seconds) + main moment + payoff/reaction
-- Ensure each clip tells a complete micro-story that hooks viewers immediately
+Your expertise includes:
+- Understanding viral psychology and engagement triggers
+- Platform-specific optimization (YouTube Shorts vs TikTok vs Instagram Reels)
+- Audience retention patterns and drop-off points
+- Current trending formats and viral mechanics
+- Hook psychology and attention-grabbing techniques
+
+VIRAL MECHANICS ANALYSIS:
+Before extracting clips, analyze the content for these viral elements:
+1. PATTERN INTERRUPTS: Unexpected moments, contradictions, or surprises
+2. EMOTIONAL PEAKS: High-energy moments, conflicts, breakthroughs, or revelations
+3. RELATABILITY FACTORS: Universal experiences, common struggles, shared frustrations
+4. CONTROVERSIAL TAKES: Contrarian opinions, hot takes, or debate-worthy statements
+5. EDUCATIONAL MOMENTS: Clear value delivery, "aha" moments, or skill demonstrations
+6. STORYTELLING ARCS: Complete narratives with setup, conflict, and resolution
+7. PERSONALITY MOMENTS: Authentic reactions, vulnerable shares, or charismatic delivery
+
+CLIP OPTIMIZATION FRAMEWORK:
+
+HOOK STRUCTURE (First 3-5 seconds):
+- Start mid-action or mid-sentence when possible
+- Lead with the most compelling part, then provide context
+- Use pattern interrupts: "Wait, what?", "This changes everything", "Nobody talks about..."
+- Include emotional hooks: shock, curiosity, controversy, or immediate value
+
+RETENTION STRATEGY (Throughout clip):
+- Maintain forward momentum with teases: "But here's what's crazy...", "Wait until you hear this..."
+- Include visual or verbal payoffs every 8-12 seconds
+- End with strong closure or cliffhanger for engagement
+
+PLATFORM-SPECIFIC CONSIDERATIONS:
+- YouTube Shorts: Favor educational/informational content, clear value propositions
+- TikTok: Prioritize entertainment, trends, personality-driven content
+- Instagram Reels: Balance of aesthetic appeal and engaging content
+
+CLIP SELECTION CRITERIA:
+Each clip MUST have:
+✓ A hook that works within first 3 seconds
+✓ Clear value or entertainment throughout
+✓ Natural conversation flow with complete context
+✓ Quotable moments that invite comments/shares
+✓ Content that aligns with {{genre}} audience expectations
+✓ Potential for multiple views/rewatches
+
+QUALITY THRESHOLDS:
+- Minimum viral potential score: 6/10
+- Must contain complete thought/exchange (no mid-sentence cuts)
+- Should answer a question, solve a problem, or entertain
+- Must feel satisfying as a standalone piece
 
 CONTENT EXTRACTION RULES:
-1. "highlightText" MUST be EXACT quotes from the transcript - no modifications whatsoever
-2. Include natural conversation flow with pauses, reactions, and context
-3. Capture complete thoughts/exchanges, not fragmented sentences
-4. Look for moments with:
-   - Strong emotional hooks in the first 3 seconds
-   - Conflict, tension, or surprise elements
-   - Relatable or controversial statements
-   - Educational insights with "aha" moments
-   - Funny exchanges with proper setup and punchline
-   - Dramatic reveals or plot twists
+1. "highlightText" = EXACT transcript quotes (zero modifications)
+2. Include natural pauses, reactions, and conversational flow
+3. Capture content between 10-60 seconds (flexible based on content quality)
+4. Ensure each clip has proper setup → main content → payoff structure
+5. Prioritize moments with immediate engagement potential
 
-OPTIMIZATION STRATEGY:
-- Prioritize moments that create immediate curiosity or emotional response
-- Look for quotable moments that spark comments and shares
-- Identify content that fits current trends in the {{genre}} space
-- Find moments that answer common questions or address popular topics
-- Seek controversy or unique perspectives (appropriate to content type)
-
-QUALITY OVER QUANTITY:
-- Generate minimum 1 clip, maximum {{shortsCount}} clips
-- Only suggest clips that have genuine viral potential
-- Each clip must be able to standalone and engage viewers completely
-- If transcript lacks engaging moments, return fewer high-quality clips
-
----
-
-User Configuration:
-- Genre: {{genre}}
-- Target Keywords: {{keywords}}
-- Maximum clips requested: {{shortsCount}}
-- Content Focus: {{contentFocus}}
-
-Video Source:
-- Title: "{{title}}"
-- Description: "{{description}}"
-
-Full Transcript:
-{{transcript}}
-
----
-
-RESPONSE FORMAT:
-For each clip, provide:
-- label: Hook description (4-8 words, action-oriented)
-- title: Viral-ready title (45-60 chars, includes emotional trigger)
-- highlightText: EXACT transcript excerpt (15-60 seconds worth of content)
-- startContext: Brief setup before the main moment
-- mood: Primary emotion (funny, shocking, inspiring, controversial, educational, dramatic)
-- viralPotential: Score 1-10 with brief explanation
-- reason: Why this specific moment will perform well (trend alignment, emotional impact, shareability)
-- suggestedHook: First 3-5 words to grab attention immediately
-  - estimatedDuration: Approximate clip length in seconds
-
-Return a JSON array with your top recommendations, ordered by viral potential (highest first).`;
+Target: Generate exactly {{shortsCount}} clips as requested by the user.`;
 
 export const generateShorts = async (transcript: string, config: ProjectDetails): Promise<AiResponse[]> => {
-  const { genre, keywords, shortsCount, title, description } = config;
+  const { genre, keywords, shortsCount, title, description, clipLength } = config;
+  
   
   if (!transcript.trim()) {
     throw new Error("Transcript is empty or invalid");
@@ -77,62 +79,98 @@ export const generateShorts = async (transcript: string, config: ProjectDetails)
     console.warn("Transcript is very short, may produce limited results");
   }
 
-  const requestedCount = Math.min(Math.max(shortsCount, 1), 10);
+  // Use the exact user input for shorts count without restrictions
+  const requestedCount = shortsCount || 2; // Default to 5 if not provided
   
-
+  // Determine clip length range
+  const clipRange = clipLength && clipLength.from && clipLength.to 
+    ? `${clipLength.from} to ${clipLength.to} seconds`
+    : "10 to 60 seconds";
+  
+  const clipDurationMin = clipLength?.from || 10;
+  const clipDurationMax = clipLength?.to || 60;
+  
   const humanPrompt = `
-  TASK: Extract ${requestedCount} viral short-form video clips from the transcript below.
-  
-  CONTENT TYPE: ${genre}
-  TARGET KEYWORDS: ${keywords}
-  SOURCE VIDEO: "${title}"
-  DESCRIPTION: ${description}
-  
-  REQUIREMENTS:
-  - Generate 1-${requestedCount} clips (quality over quantity)
-  - Each clip must be 15-60 seconds long (aim for 30-45 seconds)
-  - Include complete context: setup + main moment + payoff
-  - Extract EXACT text from transcript - no modifications
-  - Focus on moments with immediate hook potential
-  - Prioritize ${genre}-specific engaging content
-  
-  WHAT MAKES A GREAT CLIP:
-  - Strong emotional hook in first 3 seconds
-  - Complete story arc with natural flow
-  - Quotable moments that spark engagement
-  - Fits current ${genre} trends and audience expectations
-  - Contains setup, conflict/tension, and resolution
-  
-  FORMAT: Return JSON array with objects containing:
-  - label: Hook description (4-8 words)
-  - title: Viral title (45-60 characters)
-  - highlightText: EXACT transcript quote (minimum 50 words)
-  - mood: Primary emotion
-  - reason: Why this will perform well
-  - viralPotential: Score 1-10
-  
-  TRANSCRIPT:
-  ${transcript}
-  
-  Focus on moments that viewers will want to share, comment on, or watch multiple times.`;
+MISSION: Extract exactly ${requestedCount} viral short clips from this ${genre} content that will maximize views, engagement, and shares.
 
+CONTENT ANALYSIS:
+Title: "${title}"
+Genre: ${genre}
+Keywords: ${keywords}
+Description: ${description}
+Clip Length: ${clipRange}
+
+VIRAL EXTRACTION STRATEGY:
+1. First, scan the transcript for these high-performing elements:
+   - Contradictory or surprising statements
+   - Emotional peak moments (anger, excitement, revelation)
+   - Educational breakthroughs or "aha" moments  
+   - Controversial or debate-worthy opinions
+   - Relatable struggles or universal experiences
+   - Story climaxes or dramatic reveals
+   - Funny exchanges with proper setup + punchline
+
+2. For each potential clip, evaluate:
+   - Hook strength (first 3 seconds engagement potential)
+   - Retention factors (reasons to keep watching)
+   - Shareability (quotable, comment-worthy content)
+   - Completion satisfaction (feels complete as standalone)
+   - Rewatch value (layers of meaning or entertainment)
+
+3. Prioritize clips that:
+   - Start with immediate intrigue or value
+   - Deliver on the initial promise
+   - Leave viewers wanting to engage (comment/share)
+   - Fit current ${genre} trending formats
+
+EXTRACTION REQUIREMENTS:
+- Extract EXACT text from transcript (no modifications)
+- Include sufficient context (setup + main moment + resolution)
+- Aim for clips between ${clipDurationMin}-${clipDurationMax} seconds (flexible based on content quality)
+- Ensure natural conversation flow
+- Each clip must be independently engaging
+- Return exactly ${requestedCount} clips as requested
+
+OUTPUT FORMAT (JSON array):
+[
+  {
+    "label": "Hook description (4-8 words, action-oriented)",
+    "title": "Viral-ready title (45-70 chars, emotional trigger + value)",
+    "highlightText": "EXACT transcript excerpt (complete thoughts only)",
+    "startContext": "What happens right before this moment",
+    "mood": "Primary emotion (shocking/funny/inspiring/controversial/educational)",
+    "viralPotential": "Score 1-10 with reasoning",
+    "reason": "Specific viral mechanics: why this will perform (trend alignment, emotional impact, shareability factor)",
+    "suggestedHook": "First 3-5 words to grab attention",
+    "estimatedDuration": "Seconds (${clipDurationMin}-${clipDurationMax} range)",
+    "engagementTriggers": ["List of specific elements that drive engagement"],
+    "targetAudience": "Who will this resonate with most",
+    "contentType": "educational/entertainment/inspirational/controversial"
+  }
+]
+
+IMPORTANT: Return exactly ${requestedCount} clips with durations between ${clipDurationMin}-${clipDurationMax} seconds. Prioritize quality while meeting the exact count requested.
+
+TRANSCRIPT TO ANALYZE:
+${transcript}
+
+Focus on moments that make viewers stop scrolling, rewatch, and share with friends. What would make someone say "You have to see this!"?`;
 
   try {
-    console.log(`Generating shorts for ${genre} content with ${requestedCount} max clips...`);
     
     const res = await ai.models.generateContent({
       model: "gemini-1.5-flash",
       contents: [{ text: humanPrompt }],
       config: {
         systemInstruction: systemInstruction,
-        temperature: 0.8,
+        temperature: 0.7,
         topK: 40,
-        topP: 0.9,
+        topP: 0.85,
         maxOutputTokens: 4000,
       }
     });
     
-    console.log("Raw AI Response received, processing...");
+    console.log("AI analysis complete, processing viral clips...");
 
     if (!res.text) {
       throw new Error("Empty response from AI");
@@ -155,12 +193,49 @@ export const generateShorts = async (transcript: string, config: ProjectDetails)
         jsonArray = `[${betweenBraces[0]}]`;
       }
     }
+    
     if (!jsonArray) {
       throw new Error("No valid JSON structure found in AI response");
     }
+    
     try {
-      const rawClips: AiResponse[] = JSON.parse(jsonArray);
-        return rawClips;
+      const rawClips: Resp[] = JSON.parse(jsonArray);
+
+      
+      const viralClips = rawClips.filter(clip => {
+        if (!clip.viralPotential) return false;
+        
+        const score = typeof clip.viralPotential === 'string' 
+          ? parseInt(clip.viralPotential.split('/')[0]) 
+          : clip.viralPotential;
+        
+        const duration = typeof clip.estimatedDuration === 'string' 
+          ? parseInt(clip.estimatedDuration) 
+          : clip.estimatedDuration;
+
+        
+        return score >= 5 
+      });
+      
+      
+      if (viralClips.length > requestedCount) {
+        const sortedClips = viralClips.sort((a, b) => {
+          const scoreA = typeof a.viralPotential === 'string' 
+            ? parseInt(a.viralPotential.split('/')[0]) 
+            : a.viralPotential;
+          const scoreB = typeof b.viralPotential === 'string' 
+            ? parseInt(b.viralPotential.split('/')[0]) 
+            : b.viralPotential;
+          return scoreB - scoreA;
+        });
+        return sortedClips.slice(0, requestedCount);
+      }
+      
+      if (viralClips.length < requestedCount) {
+        console.warn(`Only found ${viralClips.length} quality clips, requested ${requestedCount}`);
+      }
+      
+      return viralClips;
       
     } catch (parseError) {
       console.error("JSON Parse Error:", parseError);
@@ -181,4 +256,3 @@ export const generateShorts = async (transcript: string, config: ProjectDetails)
     throw error;
   }
 };
-
